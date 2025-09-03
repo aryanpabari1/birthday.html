@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Birthday Puzzle → Anagram → Surprise Game</title>
+  <style>
+    :root { --pink1:#ffe4e1; --pink2:#fff0f5; --accent:#d63384; --accent-dark:#b30059; --text:#333; --muted:#666; }
+    *{box-sizing:border-box}
+    body{
+      font-family: Arial, sans-serif;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      min-height:100vh; margin:0; background:linear-gradient(to bottom, var(--pink1), var(--pink2));
+    }
+    h1{ color:var(--accent); text-align:center; padding:0 10px; margin:12px 0 6px }
+    .screen{ width:100%; max-width:440px; padding:18px }
+    .hidden{ display:none }
+    .card{ background:#fff; border-radius:14px; padding:16px; box-shadow:0 10px 25px rgba(0,0,0,.08) }
+
+    /* Welcome */
+    #welcome-screen{
+      position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      background:linear-gradient(to bottom, #ffb6c1, #fff0f5); z-index:10; text-align:center; padding:20px
+    }
+    #welcome-screen h1{ font-size:2em; color:var(--accent-dark); margin-bottom:12px }
+    #welcome-screen p{ font-size:1.1em; margin-bottom:18px; color:#444 }
+    .btn{ margin:10px; padding:10px 20px; border:none; border-radius:10px; background:var(--accent); color:#fff; font-size:1em; cursor:pointer }
+    .btn:active{ transform:translateY(1px) }
+    .fade-out{ animation:fadeOut .5s ease forwards }
+    @keyframes fadeOut{ to{ opacity:0; visibility:hidden } }
+
+    /* Puzzle */
+    #puzzle{ display:grid; gap:2px; margin-top:12px }
+    .tile{ cursor:pointer; background-repeat:no-repeat; background-size:100% 100%; border-radius:6px; box-shadow:0 1px 2px rgba(0,0,0,.06) }
+    #message{ margin-top:14px; font-size:1.05em; color:var(--text); max-width:360px; text-align:center }
+
+    /* Anagram */
+    #anagram-wrap{ display:flex; flex-direction:column; gap:10px }
+    .zone-label{ font-size:.95em; color:var(--muted); margin:2px 2px 0 }
+    .dropzone{
+      min-height:56px; padding:10px; border:2px dashed #e4c6d6; border-radius:12px; background:#fff;
+      display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:center;
+      transition:border-color .2s, background .2s;
+    }
+    .dropzone.active{ border-color:var(--accent); background:#fff7fb }
+    .chip{
+      padding:10px 14px; border-radius:999px; background:#fff; box-shadow:0 6px 16px rgba(0,0,0,.09);
+      border:1px solid rgba(0,0,0,.08); font-weight:bold; letter-spacing:1px; cursor:grab; user-select:none;
+    }
+    .chip:active{ cursor:grabbing }
+    #result{ margin-top:8px; font-weight:bold; text-align:center }
+    #reveal{ margin-top:14px; line-height:1.4; text-align:center }
+    #reveal img{ width:100%; border-radius:14px; margin-top:12px; display:block }
+    .row-actions{ display:flex; gap:10px; justify-content:center; margin-top:6px }
+    .link-btn{ background:none; border:none; color:var(--accent-dark); text-decoration:underline; padding:6px 10px; cursor:pointer; font-size:.95em }
+
+    /* Memory game */
+    .memory-grid{
+      display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; justify-items:stretch;
+    }
+    @media (max-width:380px){
+      .memory-grid{ grid-template-columns:repeat(3, 1fr); }
+    }
+    .memory-card{
+      position:relative; width:100%; padding-top:120%; /* aspect ratio */ perspective:800px; cursor:pointer;
+    }
+    .memory-card .inner{
+      position:absolute; inset:0; border-radius:12px; transition:transform .4s ease; transform-style:preserve-3d;
+      box-shadow:0 8px 18px rgba(0,0,0,.08);
+    }
+    .memory-card.flipped .inner{ transform:rotateY(180deg); }
+    .face{
+      position:absolute; inset:0; border-radius:12px; display:flex; align-items:center; justify-content:center;
+      backface-visibility:hidden; font-size:2rem; user-select:none;
+    }
+    .front{ background:#fff; border:1px solid rgba(0,0,0,.08); transform:rotateY(180deg); }
+    .back{ background:linear-gradient(to bottom, #ffe4e1, #fff0f5); color:#b30059; font-weight:bold; }
+  </style>
+</head>
+<body>
+
+  <!-- Welcome Screen -->
+  <div id="welcome-screen">
+    <div class="card" style="max-width:480px;">
+      <h1>🎂 Welcome to Your 21st Birthday App 🎂</h1>
+      <p>Press continue to get started on your special birthday weekend 💖</p>
+      <button class="btn" onclick="startApp()">Continue</button>
+    </div>
+  </div>
+
+  <!-- Screen 1: Photo Puzzle -->
+  <section id="puzzle-screen" class="screen">
+    <h1>💖 Unscramble Our Photo 💖</h1>
+    <div class="card" style="display:flex; flex-direction:column; align-items:center;">
+      <div id="puzzle"></div>
+      <div id="message">To get started, unlock this photo of us. Once it’s solved, it’ll take you to the next game to discover what we’re doing first 🎁</div>
+    </div>
+  </section>
+
+  <!-- Screen 2: Anagram (DRAGGABLE) -->
+  <section id="anagram-screen" class="screen hidden">
+    <h1>🧩 Quick Anagram</h1>
+    <div class="card">
+      <p style="text-align:center; margin:0 0 8px">Drag the letters to make the word:</p>
+      <div id="anagram-wrap">
+        <div class="zone">
+          <div class="zone-label">Letters</div>
+          <div id="letters" class="dropzone" aria-label="Letter pool"></div>
+        </div>
+        <div class="zone">
+          <div class="zone-label">Your answer</div>
+          <div id="answer" class="dropzone" aria-label="Your answer area"></div>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="link-btn" id="shuffleBtn" type="button">Shuffle letters</button>
+        <button class="link-btn" id="clearBtn" type="button">Clear answer</button>
+      </div>
+      <div id="result"></div>
+      <div id="reveal" class="hidden">
+        <p>🎉 Correct! We’re going to <strong>The Spence, Edinburgh</strong> for <strong>9:00 am</strong> — dress code: <strong>comfy & stylish</strong>.</p>
+        <img src="restaurantspence.jpg" alt="The Spence Edinburgh" />
+        <button class="btn" id="continueCoaster" style="width:100%; margin-top:12px">Continue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Screen 3: Surprise Game (Endless Runner) -->
+  <section id="coaster-screen" class="screen hidden">
+    <h1>🧩 Complete this to discover the next activity</h1>
+    <div class="card" style="display:flex; flex-direction:column; align-items:center;">
+      <canvas id="coasterCanvas" width="360" height="180" style="width:100%; max-width:360px; border-radius:12px; background:#eaf6ff"></canvas>
+      <div id="coasterMsg" style="margin-top:10px; text-align:center; color:#333">
+        Tap / click to jump. Clear 5 bumps to reveal the plan!
+      </div>
+      <div id="coasterReveal" class="hidden" style="margin-top:12px; text-align:center;">
+        <p>🎉 Edinburgh <strong>Alpine Coaster</strong> booked at <strong>5</strong> — dress code: <strong>warm & comfortable</strong>.</p>
+        <img src="alpine.jpg" alt="Alpine Coaster" style="width:100%; max-width:360px; border-radius:12px; margin-top:10px;" />
+        <button class="btn" id="continueDinner" style="width:100%; margin-top:12px">Continue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Screen 4: Food Matching Game -->
+  <section id="memory-screen" class="screen hidden">
+    <h1>🍽️ Match the foods to uncover tonight’s plan</h1>
+    <div class="card">
+      <div id="memoryGrid" class="memory-grid"></div>
+      <div id="memoryMsg" style="text-align:center; margin-top:10px; color:#333">Find all 6 pairs.</div>
+      <div id="memoryReveal" class="hidden" style="text-align:center; margin-top:12px;">
+        <p>🎉 Well done! You’ve revealed you are going to <strong>Gaucho</strong> at <strong>9:15pm</strong> — dress to impress ✨</p>
+        <img src="gaucho.jpg" alt="Gaucho" style="width:100%; max-width:420px; border-radius:12px; margin-top:10px;">
+      </div>
+    </div>
+  </section>
+
+  <script>
+    /* ---------- Welcome ---------- */
+    function startApp(){
+      const w = document.getElementById("welcome-screen");
+      w.classList.add("fade-out");
+      setTimeout(()=>{ w.style.display="none"; }, 480);
+    }
+
+    /* ---------- Photo Puzzle ---------- */
+    const rows = 4, cols = 4;
+    const puzzle = document.getElementById('puzzle');
+    const img = new Image();
+    img.src = "IMG_4778.jpg"; // your image file
+    img.onload = () => {
+      const maxW = Math.min(360, window.innerWidth - 40);
+      const w = maxW;
+      const h = (img.height / img.width) * w;
+      puzzle.style.width = w + "px";
+      puzzle.style.height = h + "px";
+      puzzle.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      puzzle.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+      const total = rows * cols;
+      let order = [...Array(total).keys()];
+
+      function createTiles() {
+        puzzle.innerHTML = '';
+        order.forEach((tileIndex, pos) => {
+          const div = document.createElement('div');
+          div.className = 'tile';
+          div.style.width = (w / cols) + "px";
+          div.style.height = (h / rows) + "px";
+          div.style.backgroundImage = "url(" + img.src + ")";
+          const r = Math.floor(tileIndex / cols);
+          const c = tileIndex % cols;
+          div.style.backgroundSize = `${w}px ${h}px`;
+          div.style.backgroundPosition = `${-c * (w / cols)}px ${-r * (h / rows)}px`;
+          div.addEventListener('click', () => onTileClick(pos));
+          puzzle.appendChild(div);
+        });
+      }
+
+      let selected = null;
+      function onTileClick(pos) {
+        if (selected === null) {
+          selected = pos;
+        } else if (selected === pos) {
+          selected = null;
+        } else {
+          [order[selected], order[pos]] = [order[pos], order[selected]];
+          selected = null;
+          createTiles();
+          checkSolved();
+        }
+      }
+
+      function shuffle() {
+        for (let i = order.length - 1; i > 0; i--){
+          const j = Math.floor(Math.random() * (i + 1));
+          [order[i], order[j]] = [order[j], order[i]];
+        }
+        if (order.every((v,i)=>v===i)) shuffle(); // avoid already-solved
+        createTiles();
+      }
+
+      function checkSolved() {
+        if (order.every((v,i) => v===i)) {
+          document.getElementById('message').innerText = '🎉 Nice! Unlocking your first game…';
+          setTimeout(()=> {
+            document.getElementById('puzzle-screen').classList.add('hidden');
+            startAnagram(); // initialize next game
+            document.getElementById('anagram-screen').classList.remove('hidden');
+          }, 900);
+        }
+      }
+
+      shuffle();
+    };
+
+    /* ---------- Anagram (DRAGGABLE + TAP-TO-MOVE) ---------- */
+    const targetWord = "brunch";
+
+    function shuffleString(str){
+      const arr = str.split('');
+      for (let i = arr.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      const s = arr.join('');
+      return (s.toLowerCase() === str.toLowerCase()) ? shuffleString(str) : s;
+    }
+
+    function makeChip(letter, id){
+      const span = document.createElement('span');
+      span.className = 'chip';
+      span.textContent = letter.toUpperCase();
+      span.setAttribute('draggable','true');
+      span.dataset.letter = letter;
+      span.id = id;
+
+      // Desktop drag
+      span.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain', span.id);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+
+      // Tap-to-move for mobile
+      span.addEventListener('click', ()=>{
+        const parent = span.parentElement;
+        const answerZone = document.getElementById('answer');
+        const lettersZone = document.getElementById('letters');
+        if (parent === lettersZone){
+          answerZone.appendChild(span);
+        } else {
+          lettersZone.appendChild(span);
+        }
+        checkAnswer();
+      });
+
+      return span;
+    }
+
+    function setupDropzone(zone){
+      zone.addEventListener('dragover', e=>{
+        e.preventDefault(); zone.classList.add('active');
+        e.dataTransfer.dropEffect = 'move';
+      });
+      zone.addEventListener('dragleave', ()=> zone.classList.remove('active'));
+      zone.addEventListener('drop', e=>{
+        e.preventDefault(); zone.classList.remove('active');
+        const id = e.dataTransfer.getData('text/plain');
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        const after = getDropAfterElement(zone, e.clientX, e.clientY);
+        if (after == null) {
+          zone.appendChild(el);
+        } else {
+          zone.insertBefore(el, after);
+        }
+        checkAnswer();
+      });
+    }
+
+    function getDropAfterElement(container, x, y){
+      const els = [...container.querySelectorAll('.chip')];
+      return els.find(el => {
+        const rect = el.getBoundingClientRect();
+        return y < rect.top + rect.height/2 || x < rect.left + rect.width/2;
+      });
+    }
+
+    function startAnagram(){
+      const lettersZone = document.getElementById('letters');
+      const answerZone  = document.getElementById('answer');
+      const shuffleBtn  = document.getElementById('shuffleBtn');
+      const clearBtn    = document.getElementById('clearBtn');
+
+      lettersZone.innerHTML = '';
+      answerZone.innerHTML = '';
+      document.getElementById('result').textContent = '';
+      document.getElementById('reveal').classList.add('hidden');
+
+      setupDropzone(lettersZone);
+      setupDropzone(answerZone);
+
+      const scrambled = shuffleString(targetWord);
+      scrambled.split('').forEach((ch, i)=>{
+        lettersZone.appendChild(makeChip(ch, `chip_${i}_${Date.now()}`));
+      });
+
+      shuffleBtn.onclick = () => {
+        const reshuffled = shuffleString(targetWord);
+        lettersZone.innerHTML = '';
+        answerZone.innerHTML = '';
+        reshuffled.split('').forEach((ch, i)=>{
+          lettersZone.appendChild(makeChip(ch, `chip_${i}_${Date.now()}`));
+        });
+        document.getElementById('result').textContent = '';
+        document.getElementById('reveal').classList.add('hidden');
+      };
+
+      clearBtn.onclick = () => {
+        [...answerZone.querySelectorAll('.chip')].forEach(ch => lettersZone.appendChild(ch));
+        document.getElementById('result').textContent = '';
+        document.getElementById('reveal').classList.add('hidden');
+      };
+    }
+
+    function checkAnswer(){
+      const answerZone  = document.getElementById('answer');
+      const guess = [...answerZone.querySelectorAll('.chip')].map(c=>c.dataset.letter).join('').toLowerCase();
+      const result = document.getElementById('result');
+
+      if (guess.length === 0){
+        result.textContent = '';
+        return;
+      }
+
+      if (guess.length < targetWord.length){
+        result.style.color = '#444';
+        result.textContent = `Keep going… (${guess.length}/${targetWord.length})`;
+        return;
+      }
+
+      if (guess === targetWord){
+        result.style.color = 'green';
+        result.textContent = 'Correct!';
+        document.getElementById('reveal').classList.remove('hidden');
+        if (typeof confetti === 'function') {
+          confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+        }
+      } else {
+        result.style.color = '#b00020';
+        result.textContent = 'Not quite — try again!';
+      }
+    }
+
+    // Move to Surprise Game after brunch
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'continueCoaster') {
+        document.getElementById('anagram-screen').classList.add('hidden');
+        document.getElementById('coaster-screen').classList.remove('hidden');
+        startCoasterGame();
+      }
+    });
+
+    /* --------- Surprise Game (Endless Runner with Emoji + Bounce) --------- */
+    function startCoasterGame(){
+      const canvas = document.getElementById('coasterCanvas');
+      const ctx = canvas.getContext('2d');
+
+      const W = canvas.width, H = canvas.height;
+      const groundY = H - 30;
+
+      // Player (emoji cart)
+      const cart = { x: 40, y: groundY - 22, w: 28, h: 22, vy: 0 };
+      const gravity = 0.6;
+      const jump = -9.5;
+      let canJump = true;
+
+      // Obstacles (bumps)
+      const obstacles = [];
+      let frame = 0;
+      let speed = 3;
+      let cleared = 0;
+      const GOAL = 5; // need 5 bumps cleared
+      let gameOver = false;
+      let running = true;
+
+      // Input: tap/click/space to jump
+      const jumpAction = () => {
+        if (!running || gameOver) return;
+        if (canJump) { cart.vy = jump; canJump = false; }
+      };
+      canvas.addEventListener('mousedown', jumpAction);
+      canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); jumpAction(); }, {passive:false});
+      window.addEventListener('keydown', (e)=>{ if (e.code === 'Space') jumpAction(); });
+
+      function spawnObstacle(){
+        const w = 14 + Math.floor(Math.random()*8);
+        const h = 8 + Math.floor(Math.random()*8);
+        obstacles.push({ x: W + 10, y: groundY - h, w, h, counted:false });
+      }
+
+      function reset(){
+        obstacles.length = 0;
+        frame = 0; speed = 3; cleared = 0; gameOver = false; running = true;
+        cart.x = 40; cart.y = groundY - cart.h; cart.vy = 0; canJump = true;
+        document.getElementById('coasterMsg').textContent = `Tap / click to jump. Clear ${GOAL} bumps to reveal the plan!`;
+        document.getElementById('coasterReveal').classList.add('hidden');
+        loop();
+      }
+
+      function win(){
+        running = false;
+        document.getElementById('coasterMsg').textContent = 'Nice driving!';
+        document.getElementById('coasterReveal').classList.remove('hidden');
+        if (typeof confetti === 'function') {
+          confetti({ particleCount: 160, spread: 70, origin: { y: 0.6 } });
+        }
+      }
+
+      function lose(){
+        gameOver = true;
+        running = false;
+        document.getElementById('coasterMsg').innerHTML = 'Oops! You hit a bump. <button class="link-btn" id="retryBtn" type="button">Retry</button>';
+        setTimeout(()=>{
+          const r = document.getElementById('retryBtn');
+          if (r) r.onclick = reset;
+        }, 0);
+      }
+
+      function update(){
+        frame++;
+
+        // Spawn bumps every ~90–110 frames
+        if (frame % Math.floor(90 + Math.random()*20) === 0){
+          spawnObstacle();
+          speed = Math.min(5.5, speed + 0.15);
+        }
+
+        // Physics
+        cart.vy += gravity;
+        cart.y += cart.vy;
+        if (cart.y + cart.h >= groundY){
+          cart.y = groundY - cart.h;
+          cart.vy = 0;
+          canJump = true;
+        }
+
+        // Move obstacles & detect pass/collision
+        for (let i = obstacles.length - 1; i >= 0; i--){
+          const o = obstacles[i];
+          o.x -= speed;
+
+          if (!o.counted && o.x + o.w < cart.x){
+            o.counted = true;
+            cleared++;
+            document.getElementById('coasterMsg').textContent = `Great! Bumps cleared: ${cleared}/${GOAL}`;
+            if (cleared >= GOAL) return win();
+          }
+
+          if (rectsOverlap(cart, o)) return lose();
+
+          if (o.x + o.w < -20) obstacles.splice(i, 1);
+        }
+      }
+
+      function rectsOverlap(a,b){
+        return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h);
+      }
+
+      function draw(){
+        // Sky
+        ctx.fillStyle = '#eaf6ff';
+        ctx.fillRect(0,0,W,H);
+
+        // Ground
+        ctx.fillStyle = '#b2d9ff';
+        ctx.fillRect(0, groundY, W, H - groundY);
+
+        // Track line (wavy)
+        ctx.strokeStyle = '#5aa9e6';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, groundY);
+        for (let x = 0; x <= W; x += 10){
+          const y = groundY + Math.sin((frame + x)*0.02)*2;
+          ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // Obstacles (bumps)
+        ctx.fillStyle = '#5aa9e6';
+        obstacles.forEach(o=>{
+          ctx.fillRect(o.x, o.y, o.w, o.h);
+        });
+
+        // Emoji cart 🛷 with bounce
+        const baseSize = 24;
+        const extra = Math.max(0, -cart.vy) * 0.8;
+        const size = Math.min(36, baseSize + extra);
+        ctx.font = `${size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('🛷', cart.x, cart.y + cart.h);
+      }
+
+      function loop(){
+        if (!running) return;
+        update();
+        draw();
+        requestAnimationFrame(loop);
+      }
+
+      reset(); // start
+    }
+
+    /* --------- Food Matching Game --------- */
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'continueDinner') {
+        document.getElementById('coaster-screen').classList.add('hidden');
+        document.getElementById('memory-screen').classList.remove('hidden');
+        startMemoryGame();
+      }
+    });
+
+    function startMemoryGame(){
+      const grid = document.getElementById('memoryGrid');
+      const msg  = document.getElementById('memoryMsg');
+      const reveal = document.getElementById('memoryReveal');
+
+      const items = ['🍷','🍗','🐟','🥗','🍝','🍰']; // 6 items
+      const deck = shuffleArray([...items, ...items]); // 12 cards
+
+      let first = null, second = null, lock = false, matches = 0;
+
+      grid.innerHTML = '';
+      reveal.classList.add('hidden');
+      msg.textContent = 'Find all 6 pairs.';
+
+      deck.forEach((symbol) => {
+        const card = document.createElement('div');
+        card.className = 'memory-card';
+        card.dataset.symbol = symbol;
+
+        card.innerHTML = `
+          <div class="inner">
+            <div class="face front">${symbol}</div>
+            <div class="face back">🍽️</div>
+          </div>
+        `;
+
+        card.addEventListener('click', () => {
+          if (lock || card.classList.contains('matched') || card === first) return;
+          card.classList.add('flipped');
+
+          if (!first) {
+            first = card;
+          } else {
+            second = card;
+            lock = true;
+
+            if (first.dataset.symbol === second.dataset.symbol) {
+              setTimeout(() => {
+                first.classList.add('matched');
+                second.classList.add('matched');
+                first = second = null;
+                lock = false;
+                matches++;
+                msg.textContent = `Nice! Pairs found: ${matches}/6`;
+
+                if (matches === 6) {
+                  msg.textContent = 'Delicious! All pairs matched.';
+                  reveal.classList.remove('hidden');
+                  if (typeof confetti === 'function') {
+                    confetti({ particleCount: 180, spread: 70, origin: { y: 0.6 } });
+                  }
+                }
+              }, 350);
+            } else {
+              setTimeout(() => {
+                first.classList.remove('flipped');
+                second.classList.remove('flipped');
+                first = second = null;
+                lock = false;
+              }, 700);
+            }
+          }
+        });
+
+        grid.appendChild(card);
+      });
+
+      function shuffleArray(arr){
+        for (let i = arr.length - 1; i > 0; i--){
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+    }
+  </script>
+
+  <!-- Confetti (used in anagram success + game wins) -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</body>
+</html>
