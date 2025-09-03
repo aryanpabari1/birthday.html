@@ -152,10 +152,8 @@ function confettiBurst(){
 }
 
 /* Welcome */
-document.getElementById('startBtn').onclick=()=>{document.getElementById('welcome-overlay').classList.add('fade-out');setTimeout(()=>{document.getElementById('welcome-overlay').classList.add('hidden');startPuzzle();},480);};
+document.getElementById('startBtn').addEventListener('click', ()=>{ document.getElementById('welcome-overlay').classList.add('hidden'); startPuzzle(); });
 
-/* Puzzle */
-function startPuzzle(){
   document.getElementById('puzzle-screen').classList.remove('hidden');
   const rows=4,cols=4,img=new Image();img.src="IMG_4778.jpg";img.onload=()=>{
     const puzzle=document.getElementById('puzzle'),w=Math.min(360,innerWidth-40),h=img.height/img.width*w; 
