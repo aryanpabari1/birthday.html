@@ -75,22 +75,6 @@
     }
     .front{ background:#fff; border:1px solid rgba(0,0,0,.08); transform:rotateY(180deg); }
     .back{ background:linear-gradient(to bottom, #ffe4e1, #fff0f5); color:#b30059; font-weight:bold; }
-
-    /* Word Search */
-    .ws-wrap{ display:flex; flex-direction:column; gap:10px }
-    .ws-grid{
-      display:grid; grid-template-columns:repeat(12, 1fr); gap:4px; touch-action:none;
-    }
-    .ws-cell{
-      background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:8px;
-      width:100%; aspect-ratio:1 / 1; display:flex; align-items:center; justify-content:center;
-      font-weight:bold; user-select:none;
-    }
-    .ws-cell.ws-selected{ background:#fff7fb; border-color:#e4c6d6 }
-    .ws-cell.ws-found{ background:#d63384; color:#fff; border-color:#d63384 }
-    .ws-words{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; font-size:.95em; color:#666 }
-    .ws-words span{ padding:4px 8px; border-radius:999px; background:#f8e7f1 }
-    .ws-words span.done{ background:#d63384; color:#fff; text-decoration:line-through }
   </style>
 </head>
 <body>
@@ -113,27 +97,33 @@
     </div>
   </section>
 
-  <!-- Screen 2: Word Search -->
-  <section id="wordsearch-screen" class="screen hidden">
-    <h1>🍳 Breakfast Word Search</h1>
+  <!-- Screen 2: Anagram (DRAGGABLE) -->
+  <section id="anagram-screen" class="screen hidden">
+    <h1>🧩 Quick Anagram</h1>
     <div class="card">
-      <p style="text-align:center; margin:0 0 8px">Drag to select words. Find them all to reveal the first plan!</p>
-  
-      <div class="ws-wrap">
-        <div id="wsGrid" class="ws-grid" aria-label="Word search grid"></div>
-        <div id="wsWords" class="ws-words"></div>
+      <p style="text-align:center; margin:0 0 8px">Drag the letters to make the word:</p>
+      <div id="anagram-wrap">
+        <div class="zone">
+          <div class="zone-label">Letters</div>
+          <div id="letters" class="dropzone" aria-label="Letter pool"></div>
+        </div>
+        <div class="zone">
+          <div class="zone-label">Your answer</div>
+          <div id="answer" class="dropzone" aria-label="Your answer area"></div>
+        </div>
       </div>
-  
-      <div id="wsResult" style="text-align:center; margin-top:8px; font-weight:bold;"></div>
-  
-      <div id="reveal" class="hidden" style="margin-top:14px; text-align:center; line-height:1.4;">
+      <div class="row-actions">
+        <button class="link-btn" id="shuffleBtn" type="button">Shuffle letters</button>
+        <button class="link-btn" id="clearBtn" type="button">Clear answer</button>
+      </div>
+      <div id="result"></div>
+      <div id="reveal" class="hidden">
         <p>🎉 Correct! We’re going to <strong>The Spence, Edinburgh</strong> for <strong>9:00 am</strong> — dress code: <strong>comfy & stylish</strong>.</p>
-        <img id="spenceImg" alt="The Spence Edinburgh" style="width:100%; border-radius:14px; margin-top:12px; display:block;" />
+        <img src="restaurantspence.jpg" alt="The Spence Edinburgh" />
         <button class="btn" id="continueCoaster" style="width:100%; margin-top:12px">Continue</button>
       </div>
     </div>
   </section>
-
 
   <!-- Screen 3: Surprise Game (Endless Runner) -->
   <section id="coaster-screen" class="screen hidden">
@@ -270,8 +260,8 @@
           document.getElementById('message').innerText = '🎉 Nice! Unlocking your first game…';
           setTimeout(()=> {
             document.getElementById('puzzle-screen').classList.add('hidden');
-            startWordSearch(); // initialize next game
-            document.getElementById('wordsearch-screen').classList.remove('hidden');
+            startAnagram(); // initialize next game
+            document.getElementById('anagram-screen').classList.remove('hidden');
           }, 900);
         }
       }
@@ -279,168 +269,153 @@
       shuffle();
     };
 
-      /* ---------- Word Search (drag-to-select) ---------- */
-      function startWordSearch(){
-        const WORDS = ["BRUNCH","EGGS","BACON","PANCAKES","COFFEE","TOAST"];
-        const size = 12; // 12x12 grid
-        const grid = Array.from({length:size}, ()=>Array(size).fill(null));
-        const used = new Set();
-      
-        // Directions: row,col deltas
-        const DIRS = [
-          [0,1],[1,0],[0,-1],[-1,0],  // horiz & vert
-          [1,1],[1,-1],[-1,1],[-1,-1] // diagonals
-        ];
-      
-        function placeWord(word){
-          for (let attempts=0; attempts<400; attempts++){
-            const dir = DIRS[Math.floor(Math.random()*DIRS.length)];
-            const dr = dir[0], dc = dir[1];
-            const maxR = dr===1 ? size - word.length : dr===-1 ? word.length-1 : size-1;
-            const minR = dr===-1 ? word.length-1 : 0;
-            const maxC = dc===1 ? size - word.length : dc===-1 ? word.length-1 : size-1;
-            const minC = dc===-1 ? word.length-1 : 0;
-      
-            const r0 = Math.floor(Math.random()*(maxR-minR+1))+minR;
-            const c0 = Math.floor(Math.random()*(maxC-minC+1))+minC;
-      
-            let ok = true;
-            for (let i=0;i<word.length;i++){
-              const r = r0 + dr*i, c = c0 + dc*i;
-              const cell = grid[r][c];
-              if (cell && cell !== word[i]) { ok = false; break; }
-            }
-            if (!ok) continue;
-      
-            for (let i=0;i<word.length;i++){
-              const r = r0 + dr*i, c = c0 + dc*i;
-              grid[r][c] = word[i];
-              used.add(r+','+c);
-            }
-            return true;
-          }
-          return false;
-        }
-      
-        // Place words
-        WORDS.forEach(w=>placeWord(w));
-      
-        // Fill remaining with random letters
-        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        for (let r=0;r<size;r++){
-          for (let c=0;c<size;c++){
-            if (!grid[r][c]) grid[r][c] = alphabet[Math.floor(Math.random()*alphabet.length)];
-          }
-        }
-      
-        // Render list
-        const wsWords = document.getElementById('wsWords');
-        wsWords.innerHTML = '';
-        WORDS.forEach(w=>{
-          const tag = document.createElement('span');
-          tag.textContent = w;
-          tag.id = 'word_'+w;
-          wsWords.appendChild(tag);
-        });
-      
-        // Render grid
-        const wsGrid = document.getElementById('wsGrid');
-        wsGrid.innerHTML = '';
-        const cells = []; // keep refs
-        for (let r=0;r<size;r++){
-          for (let c=0;c<size;c++){
-            const div = document.createElement('div');
-            div.className = 'ws-cell';
-            div.textContent = grid[r][c];
-            div.dataset.r = r; div.dataset.c = c;
-            wsGrid.appendChild(div);
-            cells.push(div);
-          }
-        }
-      
-        // Selection logic (drag in a straight line)
-        let selecting = false;
-        let start = null;
-        let dir = null;
-        let trail = [];
-      
-        const resetSelection = () => {
-          trail.forEach(el=>el.classList.remove('ws-selected'));
-          trail = []; dir = null; start = null; selecting = false;
-        };
-      
-        function onPointerDown(e){
-          const t = e.target.closest('.ws-cell'); if (!t) return;
-          selecting = true;
-          start = t;
-          trail = [t];
-          t.classList.add('ws-selected');
-        }
-        function onPointerEnter(e){
-          if (!selecting) return;
-          const t = e.target.closest('.ws-cell'); if (!t || trail.includes(t)) return;
-      
-          const r0 = +start.dataset.r, c0 = +start.dataset.c;
-          const r1 = +t.dataset.r, c1 = +t.dataset.c;
-          const dr = Math.sign(r1 - r0), dc = Math.sign(c1 - c0);
-      
-          // Lock direction after second cell
-          if (!dir){
-            // ensure straight line (8 dirs only)
-            if (!((r1===r0)||(c1===c0)||Math.abs(r1-r0)===Math.abs(c1-c0))) return;
-            dir = [dr, dc];
-          } else {
-            if (dr !== dir[0] || dc !== dir[1]) return;
-          }
-      
-          // Ensure cell is the exact next in line
-          const last = trail[trail.length-1];
-          const lr = +last.dataset.r + dir[0];
-          const lc = +last.dataset.c + dir[1];
-          if (r1 !== lr || c1 !== lc) return;
-      
-          t.classList.add('ws-selected');
-          trail.push(t);
-        }
-        function onPointerUp(){
-          if (!selecting) return;
-          const picked = trail.map(el=>el.textContent).join('');
-          const rev = picked.split('').reverse().join('');
-      
-          let found = null;
-          for (const w of WORDS){
-            const tag = document.getElementById('word_'+w);
-            if (tag.classList.contains('done')) continue;
-            if (w === picked || w === rev){ found = w; break; }
-          }
-      
-          if (found){
-            trail.forEach(el=>{ el.classList.remove('ws-selected'); el.classList.add('ws-found'); el.dataset.locked='1'; });
-            document.getElementById('word_'+found).classList.add('done');
-            const doneCount = [...document.querySelectorAll('.ws-words span.done')].length;
-            document.getElementById('wsResult').textContent = `Nice! Found ${doneCount}/${WORDS.length}`;
-            if (doneCount === WORDS.length){
-              // Reveal same as before
-              const spence = localStorage.getItem(KEYS.spence);
-              const spenceImg = document.getElementById('spenceImg');
-              if (spence) spenceImg.src = spence;
-              document.getElementById('reveal').classList.remove('hidden');
-              confetti();
-            }
-          } else {
-            // Not a word → just clear selection
-            trail.forEach(el=>el.classList.remove('ws-selected'));
-          }
-      
-          trail = []; dir = null; start = null; selecting = false;
-        }
-      
-        // Pointer events (works for mouse + touch)
-        wsGrid.addEventListener('pointerdown', onPointerDown);
-        wsGrid.addEventListener('pointerenter', onPointerEnter, true);
-        window.addEventListener('pointerup', onPointerUp);
+    /* ---------- Anagram (DRAGGABLE + TAP-TO-MOVE) ---------- */
+    const targetWord = "brunch";
+
+    function shuffleString(str){
+      const arr = str.split('');
+      for (let i = arr.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
       }
-    
+      const s = arr.join('');
+      return (s.toLowerCase() === str.toLowerCase()) ? shuffleString(str) : s;
+    }
+
+    function makeChip(letter, id){
+      const span = document.createElement('span');
+      span.className = 'chip';
+      span.textContent = letter.toUpperCase();
+      span.setAttribute('draggable','true');
+      span.dataset.letter = letter;
+      span.id = id;
+
+      // Desktop drag
+      span.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain', span.id);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+
+      // Tap-to-move for mobile
+      span.addEventListener('click', ()=>{
+        const parent = span.parentElement;
+        const answerZone = document.getElementById('answer');
+        const lettersZone = document.getElementById('letters');
+        if (parent === lettersZone){
+          answerZone.appendChild(span);
+        } else {
+          lettersZone.appendChild(span);
+        }
+        checkAnswer();
+      });
+
+      return span;
+    }
+
+    function setupDropzone(zone){
+      zone.addEventListener('dragover', e=>{
+        e.preventDefault(); zone.classList.add('active');
+        e.dataTransfer.dropEffect = 'move';
+      });
+      zone.addEventListener('dragleave', ()=> zone.classList.remove('active'));
+      zone.addEventListener('drop', e=>{
+        e.preventDefault(); zone.classList.remove('active');
+        const id = e.dataTransfer.getData('text/plain');
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        const after = getDropAfterElement(zone, e.clientX, e.clientY);
+        if (after == null) {
+          zone.appendChild(el);
+        } else {
+          zone.insertBefore(el, after);
+        }
+        checkAnswer();
+      });
+    }
+
+    function getDropAfterElement(container, x, y){
+      const els = [...container.querySelectorAll('.chip')];
+      return els.find(el => {
+        const rect = el.getBoundingClientRect();
+        return y < rect.top + rect.height/2 || x < rect.left + rect.width/2;
+      });
+    }
+
+    function startAnagram(){
+      const lettersZone = document.getElementById('letters');
+      const answerZone  = document.getElementById('answer');
+      const shuffleBtn  = document.getElementById('shuffleBtn');
+      const clearBtn    = document.getElementById('clearBtn');
+
+      lettersZone.innerHTML = '';
+      answerZone.innerHTML = '';
+      document.getElementById('result').textContent = '';
+      document.getElementById('reveal').classList.add('hidden');
+
+      setupDropzone(lettersZone);
+      setupDropzone(answerZone);
+
+      const scrambled = shuffleString(targetWord);
+      scrambled.split('').forEach((ch, i)=>{
+        lettersZone.appendChild(makeChip(ch, `chip_${i}_${Date.now()}`));
+      });
+
+      shuffleBtn.onclick = () => {
+        const reshuffled = shuffleString(targetWord);
+        lettersZone.innerHTML = '';
+        answerZone.innerHTML = '';
+        reshuffled.split('').forEach((ch, i)=>{
+          lettersZone.appendChild(makeChip(ch, `chip_${i}_${Date.now()}`));
+        });
+        document.getElementById('result').textContent = '';
+        document.getElementById('reveal').classList.add('hidden');
+      };
+
+      clearBtn.onclick = () => {
+        [...answerZone.querySelectorAll('.chip')].forEach(ch => lettersZone.appendChild(ch));
+        document.getElementById('result').textContent = '';
+        document.getElementById('reveal').classList.add('hidden');
+      };
+    }
+
+    function checkAnswer(){
+      const answerZone  = document.getElementById('answer');
+      const guess = [...answerZone.querySelectorAll('.chip')].map(c=>c.dataset.letter).join('').toLowerCase();
+      const result = document.getElementById('result');
+
+      if (guess.length === 0){
+        result.textContent = '';
+        return;
+      }
+
+      if (guess.length < targetWord.length){
+        result.style.color = '#444';
+        result.textContent = `Keep going… (${guess.length}/${targetWord.length})`;
+        return;
+      }
+
+      if (guess === targetWord){
+        result.style.color = 'green';
+        result.textContent = 'Correct!';
+        document.getElementById('reveal').classList.remove('hidden');
+        if (typeof confetti === 'function') {
+          confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+        }
+      } else {
+        result.style.color = '#b00020';
+        result.textContent = 'Not quite — try again!';
+      }
+    }
+
+    // Move to Surprise Game after brunch
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'continueCoaster') {
+        document.getElementById('anagram-screen').classList.add('hidden');
+        document.getElementById('coaster-screen').classList.remove('hidden');
+        startCoasterGame();
+      }
+    });
 
     /* --------- Surprise Game (Endless Runner with Emoji + Bounce) --------- */
     function startCoasterGame(){
